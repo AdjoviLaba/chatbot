@@ -1,0 +1,14 @@
+chatbot/
+__pycache__/
+*.pyc
+.env
+instance/
+uploads/
+*.db
+.DS_Store
+scripts/Reviews.csv
+scripts/reviews*.csv
+instance/
+migrations/
+*.sqlite3
+models/review_gpt_model/
