@@ -13,3 +13,4 @@ migrations/
 *.sqlite3
 models/review_gpt_model/
 data/conversations/
+data/processed/reviews.csvdata/processed/reviews.csv
