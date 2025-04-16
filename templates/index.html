@@ -1,0 +1,99 @@
+<!-- In templates/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Product Review Chatbot</title>
+    <style>
+        body { font-family: Arial; max-width: 800px; margin: 0 auto; padding: 20px; }
+        #chat-container { border: 1px solid #ccc; height: 400px; overflow-y: scroll; padding: 10px; margin-bottom: 10px; }
+        #message-input { width: 70%; padding: 8px; }
+        #file-input { display: none; }
+        .message { margin-bottom: 10px; padding: 8px; border-radius: 5px; max-width: 80%; }
+        .user { text-align: right; margin-left: auto; background-color: #e3f2fd; }
+        .bot { text-align: left; background-color: #f1f1f1; }
+        .controls { display: flex; gap: 10px; }
+        button { padding: 8px 12px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Product Review Chatbot</h1>
+    <p>Ask about any product to get a review!</p>
+    
+    <div id="chat-container"></div>
+    
+    <div class="controls">
+        <input type="text" id="message-input" placeholder="Ask about a product (e.g., 'What do you think about iPhone 14?')">
+        <button onclick="document.getElementById('file-input').click()">📷</button>
+        <input type="file" id="file-input" accept="image/*" onchange="handleImageUpload(event)">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <script>
+        let chatContainer = document.getElementById('chat-container');
+        let messageInput = document.getElementById('message-input');
+        let currentImage = null;
+
+        // Initialize with a welcome message
+        window.onload = function() {
+            addMessage("Hello! I'm a product review chatbot. Ask me about any product, and I'll generate a review for it!", false);
+        };
+
+        function addMessage(text, isUser) {
+            let div = document.createElement('div');
+            div.className = `message ${isUser ? 'user' : 'bot'}`;
+            div.textContent = text;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function sendMessage() {
+            let message = messageInput.value.trim();
+            if (!message && !currentImage) return;
+            
+            if (message) {
+                addMessage(message, true);
+            }
+            
+            messageInput.value = '';
+            
+            fetch('/api/test/generate_review', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    product_name: message
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    addMessage("Error: " + data.error, false);
+                } else {
+                    addMessage(data.review, false);
+                }
+            })
+            .catch(error => {
+                addMessage("Sorry, there was an error processing your request.", false);
+                console.error(error);
+            });
+        }
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    currentImage = reader.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Allow pressing Enter to send messages
+        messageInput.addEventListener("keyup", function(event) {
+            if (event.key === "Enter") {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

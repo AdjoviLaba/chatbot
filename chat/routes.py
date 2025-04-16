@@ -211,7 +211,7 @@ def send_message(conversation_id):
         conversation_id=conversation.id,
         role='user',
         content=data['content'],
-        metadata=data.get('metadata', {})
+        message_data=data.get('metadata', {})
     )
     
     db.session.add(user_message)
@@ -222,61 +222,52 @@ def send_message(conversation_id):
     
     # Process image if provided
     image_description = None
+    product_from_image = None
     if 'image' in data and data['image']:
         try:
-            result = current_app.vision_analyzer.process_image(data['image'])
-            image_description = result['description'] if result and 'description' in result else "No description available"
-
+            vision_analyzer = current_app.vision_analyzer
+            result = vision_analyzer.process_image(data['image'])
+            image_description = result['description']
+            product_info = result.get('product_info', {})
+            product_from_image = product_info.get('possible_product_name')
         except Exception as e:
-            current_app.logger.error(f"Image processing failed: {str(e)}")
-            image_description = "Image processing failed"
+            current_app.logger.error(f"Error processing image: {str(e)}")
     
-    # Get conversation state and context
-    conv_data = current_app.conversation_manager.get_conversation(
-        user.public_id, 
-        conversation_id=conversation.public_id
+    # Extract product from message text
+    conversation_manager = current_app.conversation_manager
+    product_from_text = conversation_manager.extract_product_from_message(
+        data['content'],
+        image_description
     )
-
-    # Update conversation with user message
-    current_app.conversation_manager.add_message(
-        user.public_id, 
-        'user', 
-        data['content'], 
-        conversation_id=conversation.public_id
-    )
-
-    # Extract product info if in initial state
-    if conv_data['state'] == 'initial':
-        product_name = current_app.conversation_manager.extract_product_from_message(
-            data['content'], 
-            image_description
-        )
-        if product_name:
-            current_app.conversation_manager.update_state(
-                user.public_id,
-                current_app.conversation_manager.ConversationState.PRODUCT_IDENTIFIED,
-                {'product_name': product_name},
-                conversation_id=conversation.public_id
-            )
-            conv_data = current_app.conversation_manager.get_conversation(
-                user.public_id, 
-                conversation_id=conversation.public_id
-            )
-    prompt = current_app.conversation_manager.generate_prompt_from_context(conv_data)
-    assistant_response = current_app.review_generator.generate_review(prompt)[0]
     
-    # Update conversation metadata
-    conversation.context_data = conv_data.get('context', {})
+    # Determine which product to review
+    product_to_review = product_from_text or product_from_image
+    
+    # Generate appropriate response based on context
+    if product_to_review:
+        # Generate a review for the identified product
+        prompt = f"Write a detailed review for {product_to_review}."
+        review_generator = current_app.review_generator
+        assistant_response = review_generator.generate_review(prompt)[0]
+        
+        # Clean up response
+        import re
+        assistant_response = re.sub(r'<[^>]*>.*?</[^>]*>', '', assistant_response)
+        assistant_response = re.sub(r'<[^>]*>', '', assistant_response)
+        assistant_response = re.sub(r'^[^a-zA-Z0-9]+', '', assistant_response)
+    else:
+        # Handle general conversation
+        assistant_response = "I'm a product review chatbot. Please ask me about a specific product, and I'll generate a review for it!"
     
     # Create an assistant message with the response
     assistant_message = Message(
         conversation_id=conversation.id,
         role='assistant',
         content=assistant_response,
-        metadata={
+        message_data={
             'image_description': image_description,
-            'model_version': '1.0',
-            'state': conversation.metadata.get('state', 'initial') if conversation.metadata else 'initial'
+            'product_reviewed': product_to_review,
+            'model_version': '1.0'
         }
     )
     
@@ -288,7 +279,7 @@ def send_message(conversation_id):
         'role': assistant_message.role,
         'content': assistant_message.content,
         'timestamp': assistant_message.timestamp.isoformat(),
-        'metadata': assistant_message.metadata
+        'metadata': assistant_message.message_data
     }), 201
 
 @chat_bp.route('/upload-image', methods=['POST'])

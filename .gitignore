@@ -12,3 +12,4 @@ instance/
 migrations/
 *.sqlite3
 models/review_gpt_model/
+data/conversations/
